@@ -9,16 +9,22 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 )
 
-var powerConsumption = prometheus.NewGauge(prometheus.GaugeOpts{
-	Name: "ipmi_power_consumption_watts", Help: "Displays the power consumption in Watts of an specific VM"})
+var serviceLastTime = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "tuxedo_service_time_last", Help: "Displays the last time a specific TUXEDO service reported."},
+	[]string{"Service", "Routine", "Program", "SRVID"})
+
+var serviceMaxTime = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "tuxedo_service_time_max", Help: "Displays the MAX time a specific TUXEDO service reported."},
+	[]string{"Service", "Routine", "Program", "SRVID"})
 
 var serviceReqs = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
-		Name: "tuxedo_requests_total",
+		Name: "tuxedo_service_requests_total",
 		Help: "How many TUXEDO requests processed, partitioned by status and service.",
 	},
 	[]string{"Service", "Routine", "Program", "SRVID", "status"},
@@ -76,14 +82,17 @@ func getPower() {
 		serviceReqs.WithLabelValues(m["Service"], m["Routine"], m["Prog"], m["SRVID"], "SUCC").Set(s * getScale(m["S"]))
 		s, _ = strconv.ParseFloat(m["FAIL"], 64)
 		serviceReqs.WithLabelValues(m["Service"], m["Routine"], m["Prog"], m["SRVID"], "FAIL").Set(s)
+		s, _ = strconv.ParseFloat(m["MAX"], 64)
+		serviceMaxTime.WithLabelValues(m["Service"], m["Routine"], m["Prog"], m["SRVID"]).Set(s)
+		s, _ = strconv.ParseFloat(m["LAST"], 64)
+		serviceLastTime.WithLabelValues(m["Service"], m["Routine"], m["Prog"], m["SRVID"]).Set(s)
 	}
-	watts, err := strconv.ParseFloat(strings.Split("1,2,4", ",")[2], 64)
-	powerConsumption.Set(watts)
 }
 
 // This is the first function to execute
 func init() {
-	prometheus.MustRegister(powerConsumption)
+	prometheus.MustRegister(serviceMaxTime)
+	prometheus.MustRegister(serviceLastTime)
 	prometheus.MustRegister(serviceReqs)
 	getPower()
 }
